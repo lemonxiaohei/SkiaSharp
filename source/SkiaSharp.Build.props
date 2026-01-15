@@ -139,7 +139,7 @@
   <PropertyGroup>
     <BasicTargetFrameworks>$(BasicTargetFrameworksCurrent);$(BasicTargetFrameworksPrevious);$(BasicTargetFrameworksNext)</BasicTargetFrameworks>
     <PlatformTargetFrameworks>$(PlatformTargetFrameworksCurrent);$(PlatformTargetFrameworksPrevious);$(PlatformTargetFrameworksNext)</PlatformTargetFrameworks>
-    <AllTargetFrameworks>$(BasicTargetFrameworks);$(PlatformTargetFrameworks)</AllTargetFrameworks>
+    <AllTargetFrameworks>$(FullFrameworkTargetFrameworks)</AllTargetFrameworks>
   </PropertyGroup>
 
   <!-- Windows TFMs -->

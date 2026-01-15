@@ -781,7 +781,111 @@ Task ("Everything")
     .IsDependentOn ("nuget")
     .IsDependentOn ("tests")
     .IsDependentOn ("samples");
+    // Pack specific NuGets by project/package name.
+// Pack specific NuGets by project/package name.
+// Usage:
+//   dotnet cake --target=nuget-pack-specific
+//   dotnet cake --target=nuget-pack-specific --pack="SkiaSharp,SkiaSharp.Views.WPF"
+Task("nuget-pack-specific")
+    .Description("Pack a specific set of NuGet packages (by project/package name).")
+    .Does(() =>
+{
+    var packArg = Argument("pack", "");
+    var defaultList = new[] { "SkiaSharp", "SkiaSharp.Views.Desktop.Common", "SkiaSharp.Views.WPF" };
+    var names = string.IsNullOrWhiteSpace(packArg)
+        ? defaultList
+        : packArg.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
 
+    var props = new Dictionary<string, string>(MSBUILD_VERSION_PROPERTIES) {
+        { "BuildingInsideUnoSourceGenerator", "true" },
+        { "BuildProjectReferences", "false" }, // avoid building project refs
+    };
+
+    EnsureDirectoryExists(OUTPUT_NUGETS_PATH);
+
+    // helper: find matching project files for a package name
+    Func<string, FilePath[]> findProjects = (string packageName) => {
+        var all = GetFiles("./**/*.csproj")
+            .Where(p => !p.FullPath.Contains("/benchmarks/", StringComparison.OrdinalIgnoreCase)
+                     && !p.FullPath.Contains("\\benchmarks\\", StringComparison.OrdinalIgnoreCase)
+                     && !p.FullPath.Contains("/tools/", StringComparison.OrdinalIgnoreCase)
+                     && !p.FullPath.Contains("\\tools\\", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var matched = new List<FilePath>();
+
+        foreach (var p in all) {
+            try {
+                var xdoc = XDocument.Load(p.FullPath);
+                var ns = xdoc.Root.Name.Namespace;
+                var pkg = xdoc.Descendants(ns + "PackageId").FirstOrDefault()?.Value;
+                var asm = xdoc.Descendants(ns + "AssemblyName").FirstOrDefault()?.Value;
+                if (!string.IsNullOrEmpty(pkg) && string.Equals(pkg, packageName, StringComparison.OrdinalIgnoreCase)) {
+                    matched.Add(p);
+                    continue;
+                }
+                if (!string.IsNullOrEmpty(asm) && string.Equals(asm, packageName, StringComparison.OrdinalIgnoreCase)) {
+                    matched.Add(p);
+                    continue;
+                }
+            } catch {
+                // ignore parse/load errors and continue
+            }
+        }
+
+        // fallback: strict filename match (e.g. SkiaSharp.csproj)
+        if (matched.Count == 0) {
+            var fallback = GetFiles($"./**/{packageName}.csproj")
+                .Where(p => !p.FullPath.Contains("/benchmarks/", StringComparison.OrdinalIgnoreCase)
+                         && !p.FullPath.Contains("\\benchmarks\\", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            matched.AddRange(fallback);
+        }
+
+        return matched.ToArray();
+    };
+
+    foreach (var name in names) {
+        Information($"Packing candidates for: {name}");
+
+        var projects = findProjects(name);
+        if (projects.Length == 0) {
+            Warning($"No suitable .csproj found for '{name}'. Skipping.");
+            continue;
+        }
+
+        foreach (var proj in projects) {
+            Information($"  - Packing project: {proj}");
+
+            // pack stable
+            RunDotNetPack(
+                proj,
+                OUTPUT_NUGETS_PATH,
+                bl: $".{name}.pack",
+                configuration: CONFIGURATION,
+                additionalArgs: "/restore /nologo",
+                properties: props);
+
+            // pack preview variant (optional)
+            var previewProps = new Dictionary<string, string>(props) {
+                { "VersionSuffix", PREVIEW_NUGET_SUFFIX ?? "" }
+            };
+            RunDotNetPack(
+                proj,
+                OUTPUT_NUGETS_PATH,
+                bl: $".{name}.pre.pack",
+                configuration: CONFIGURATION,
+                additionalArgs: "/restore /nologo",
+                properties: previewProps);
+        }
+    }
+
+    // move symbol packages like the normal flow
+    EnsureDirectoryExists(OUTPUT_SYMBOLS_NUGETS_PATH);
+    DeleteFiles($"{OUTPUT_SYMBOLS_NUGETS_PATH}/*.nupkg");
+    MoveFiles($"{OUTPUT_NUGETS_PATH}/*.snupkg", OUTPUT_SYMBOLS_NUGETS_PATH);
+    MoveFiles($"{OUTPUT_NUGETS_PATH}/*.symbols.nupkg", OUTPUT_SYMBOLS_NUGETS_PATH);
+});
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // BUILD NOW
 ////////////////////////////////////////////////////////////////////////////////////////////////////

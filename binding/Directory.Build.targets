@@ -1,11 +1,11 @@
 <Project>
 
   <ItemGroup Condition=" ($(TargetFramework.StartsWith('net4')) or '$(TargetFramework)' == 'netstandard2.0') and (!$(MSBuildProjectName.Contains('.NativeAssets.'))) ">
-    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
   </ItemGroup>
 
   <ItemGroup Condition=" ('$(TargetFramework)' == 'netstandard2.1') and (!$(MSBuildProjectName.Contains('.NativeAssets.'))) ">
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.3" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(PackagingGroup)' == 'SkiaSharp'">
